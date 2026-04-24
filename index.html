@@ -173,6 +173,12 @@
     <div class="campaign-selector">
       <div class="selector-label">CAMPAÑA</div>
       <div class="campaign-tabs" id="campaignTabs"></div>
+      <div id="historicasWrap" style="display:none; margin-top:8px;">
+        <div class="campaign-tabs" id="campaignTabsHistoricas"></div>
+      </div>
+      <div style="margin-top:8px;">
+        <span id="toggleHistoricas" style="font-size:11px; color:var(--stone); cursor:pointer; text-decoration:underline; text-underline-offset:3px; display:none;"></span>
+      </div>
     </div>
     <div class="kpis-section">
       <div class="section-label">MÉTRICAS DEL PERÍODO</div>
@@ -555,22 +561,68 @@ function renderInsight(t,rows) {
   document.getElementById('insightText').innerHTML=txt;
 }
 
-function renderTabs(campanas,onSelect) {
-  const tabs=document.getElementById('campaignTabs');
-  tabs.innerHTML='';
-  function mk(label,obj,rows,active) {
-    const btn=document.createElement('div');
-    btn.className='campaign-tab'+(active?' active':'');
-    btn.innerHTML=label+(obj?` <span class="obj-badge">${getObjLabel(obj)}</span>`:'');
-    btn.title=label;
-    btn.onclick=()=>{document.querySelectorAll('.campaign-tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');onSelect(rows);};
-    tabs.appendChild(btn);
+function renderTabs(campanas, onSelect) {
+  const tabs = document.getElementById('campaignTabs');
+  const tabsHist = document.getElementById('campaignTabsHistoricas');
+  const toggleBtn = document.getElementById('toggleHistoricas');
+  const historicasWrap = document.getElementById('historicasWrap');
+  tabs.innerHTML = '';
+  tabsHist.innerHTML = '';
+
+  // Campaña activa = tuvo gasto en los últimos 30 días
+  const hace30 = getDias(30);
+  const nombresActivos = new Set(
+    allD.filter(r => (r.fecha||r.date_start||'') >= hace30 && parseN(r.gasto) > 0)
+        .map(r => r.campaña_nombre||r.campaign_name||'')
+        .filter(Boolean)
+  );
+
+  const nombres = [...new Set(campanas.map(c=>c.campaña_nombre||c.campaign_name).filter(Boolean))];
+  const activas = nombres.filter(n => nombresActivos.has(n));
+  const historicas = nombres.filter(n => !nombresActivos.has(n));
+
+  function mk(label, obj, rows, active, container) {
+    const btn = document.createElement('div');
+    btn.className = 'campaign-tab' + (active ? ' active' : '');
+    btn.innerHTML = label + (obj ? ` <span class="obj-badge">${getObjLabel(obj)}</span>` : '');
+    btn.title = label;
+    btn.onclick = () => {
+      document.querySelectorAll('.campaign-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      onSelect(rows);
+    };
+    container.appendChild(btn);
   }
-  mk('Todas',null,campanas,true);
-  [...new Set(campanas.map(c=>c.campaña_nombre||c.campaign_name).filter(Boolean))].forEach(nombre=>{
-    const f=campanas.filter(c=>(c.campaña_nombre||c.campaign_name)===nombre);
-    mk(nombre.length>30?nombre.substring(0,28)+'...':nombre,f[0]?.objetivo||'',f,false);
+
+  // Tab "Todas" siempre visible
+  mk('Todas', null, campanas, true, tabs);
+
+  // Campañas activas como tabs principales
+  activas.forEach(nombre => {
+    const f = campanas.filter(c => (c.campaña_nombre||c.campaign_name) === nombre);
+    mk(nombre.length > 30 ? nombre.substring(0,28)+'...' : nombre, f[0]?.objetivo||'', f, false, tabs);
   });
+
+  // Campañas históricas colapsadas
+  if (historicas.length > 0) {
+    historicas.forEach(nombre => {
+      const f = campanas.filter(c => (c.campaña_nombre||c.campaign_name) === nombre);
+      mk(nombre.length > 30 ? nombre.substring(0,28)+'...' : nombre, f[0]?.objetivo||'', f, false, tabsHist);
+    });
+
+    toggleBtn.style.display = 'inline';
+    toggleBtn.textContent = `+ Ver ${historicas.length} campaña${historicas.length > 1 ? 's' : ''} histórica${historicas.length > 1 ? 's' : ''}`;
+    let expandido = false;
+    toggleBtn.onclick = () => {
+      expandido = !expandido;
+      historicasWrap.style.display = expandido ? 'block' : 'none';
+      toggleBtn.textContent = expandido
+        ? `− Ocultar históricas`
+        : `+ Ver ${historicas.length} campaña${historicas.length > 1 ? 's' : ''} histórica${historicas.length > 1 ? 's' : ''}`;
+    };
+  } else {
+    toggleBtn.style.display = 'none';
+  }
 }
 
 let allC=[],allD=[],allA=[];
