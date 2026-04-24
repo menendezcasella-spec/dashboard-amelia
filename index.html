@@ -569,13 +569,20 @@ function renderTabs(campanas, onSelect) {
   tabs.innerHTML = '';
   tabsHist.innerHTML = '';
 
-  // Campaña activa = Meta la reporta como ACTIVE
+  // Campaña activa = Meta la reporta como ACTIVE (viene del endpoint /campaigns)
+  // Valores posibles: ACTIVE, PAUSED, DELETED, ARCHIVED, WITH_ISSUES
   const nombresActivos = new Set(
     campanas
-      .filter(c => (c.estado||'').toUpperCase() === 'ACTIVE')
+      .filter(c => {
+        const est = (c.estado||'').toUpperCase();
+        return est === 'ACTIVE' || est === 'WITH_ISSUES';
+      })
       .map(c => c.campaña_nombre||c.campaign_name||'')
       .filter(Boolean)
   );
+  // Si ninguna tiene estado conocido (Sheet vieja), mostrar todas como activas
+  const hayEstados = campanas.some(c => ['ACTIVE','PAUSED','ARCHIVED','DELETED','WITH_ISSUES'].includes((c.estado||'').toUpperCase()));
+  if (!hayEstados) { campanas.forEach(c => nombresActivos.add(c.campaña_nombre||c.campaign_name||'')); }
 
   const nombres = [...new Set(campanas.map(c=>c.campaña_nombre||c.campaign_name).filter(Boolean))];
   const activas = nombres.filter(n => nombresActivos.has(n));
