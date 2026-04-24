@@ -569,14 +569,10 @@ function renderTabs(campanas, onSelect) {
   tabs.innerHTML = '';
   tabsHist.innerHTML = '';
 
-  // Campaña activa = fecha_fin en los últimos 30 días o sin fecha_fin
-  const hace30 = getDias(30);
+  // Campaña activa = Meta la reporta como ACTIVE
   const nombresActivos = new Set(
     campanas
-      .filter(c => {
-        const fin = c.fecha_fin || '';
-        return !fin || fin >= hace30;
-      })
+      .filter(c => (c.estado||'').toUpperCase() === 'ACTIVE')
       .map(c => c.campaña_nombre||c.campaign_name||'')
       .filter(Boolean)
   );
