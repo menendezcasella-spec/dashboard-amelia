@@ -335,7 +335,19 @@ function renderKpis(rows) {
     roas:         {label:'ROAS',        value:roas>0?roas.toFixed(2)+'x':'—',sub:'retorno s/ inv.',     h:true},
   };
 
-  const show = getMetrics(obj)
+  // Métricas base según objetivo declarado por Meta
+  let metricKeys = [...getMetrics(obj)];
+  // Si hay mensajes reales, mostrarlos siempre (Meta clasifica campañas de WhatsApp como SALES/ENGAGEMENT)
+  if(t.mensajes>0 && !metricKeys.includes('mensajes')) {
+    metricKeys.push('mensajes');
+    metricKeys.push('costo_mensaje');
+  }
+  // Si hay leads reales, mostrarlos siempre
+  if(t.leads>0 && !metricKeys.includes('leads')) {
+    metricKeys.push('leads');
+    metricKeys.push('costo_lead');
+  }
+  const show = metricKeys
     .filter(k=>all[k])
     .filter(k=>{
       if(k==='mensajes'      && t.mensajes===0) return false;
