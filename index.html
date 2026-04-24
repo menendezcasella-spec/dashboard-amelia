@@ -156,6 +156,8 @@
           <div class="preset-btn active" data-days="30">30 días</div>
           <div class="preset-btn" data-days="60">60 días</div>
           <div class="preset-btn" data-days="90">90 días</div>
+          <div class="preset-btn" data-days="180">180 días</div>
+          <div class="preset-btn" data-days="365">1 año</div>
         </div>
       </div>
       <div class="filter-group">
@@ -297,6 +299,7 @@ function filtrarPorFecha(rows, desde, hasta) {
   });
 }
 
+// Totales desde raw_campañas (una fila por campaña, período completo)
 function calcTotals(rows) {
   const t = {spend:0,alcance:0,impresiones:0,clicks:0,mensajes:0,leads:0,carritos:0,ventas:0,_w:0,_ctr:0,_cpm:0,_frec:0};
   rows.forEach(r => {
@@ -317,14 +320,48 @@ function calcTotals(rows) {
   return t;
 }
 
+// Totales desde raw_diario (un registro por día) — para filtros de fecha personalizados
+function calcTotalsFromDiario(diario, campanas, desde, hasta) {
+  // Filtrar días del período
+  const rows = diario.filter(r => {
+    const f = r.fecha||r.date_start||'';
+    if(!f) return false;
+    if(desde && f < desde) return false;
+    if(hasta && f > hasta) return false;
+    return true;
+  });
+
+  const t = {spend:0,alcance:0,impresiones:0,clicks:0,mensajes:0,leads:0,carritos:0,ventas:0,_w:0,_ctr:0,_cpm:0,_frec:0};
+  rows.forEach(r => {
+    const imp = parseI(r.impresiones);
+    t.spend       += parseN(r.gasto);
+    t.impresiones += imp;
+    t.clicks      += parseI(r.clicks);
+    t.mensajes    += parseI(r.mensajes);
+    t.leads       += parseI(r.leads);
+    t.carritos    += parseI(r.carritos);
+    t.ventas      += parseI(r.ventas);
+    t._w          += imp;
+    t._ctr        += parseN(r.ctr) * imp;
+    t._cpm        += parseN(r.cpm) * imp;
+    t._frec       += parseN(r.frecuencia) * imp;
+  });
+
+  // Alcance: no se puede sumar por día, tomamos de campañas como referencia
+  // (Meta calcula reach único — la suma diaria lo infla)
+  t.alcance = calcTotals(campanas).alcance;
+
+  return t;
+}
+
 function detectarObjetivo(rows) {
   const counts = {};
   rows.forEach(r=>{ const o=r.objetivo||'default'; counts[o]=(counts[o]||0)+1; });
   return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0]||'default';
 }
 
-function renderKpis(rows) {
-  const t = calcTotals(rows);
+function renderKpis(rows, totalsOverride) {
+  const t = totalsOverride || calcTotals(rows);
   const obj = detectarObjetivo(rows);
   const ctr  = t._w>0 ? t._ctr/t._w : 0;
   const cpm  = t._w>0 ? t._cpm/t._w : 0;
@@ -543,13 +580,20 @@ function getDias(n) { const d=new Date(); d.setDate(d.getDate()-n); return d.toI
 function hoy() { return new Date().toISOString().split('T')[0]; }
 function fmtDate(s) { return new Date(s+'T12:00:00').toLocaleDateString('es-AR'); }
 
-function update(rows,desde,hasta) {
+function update(campañasRows, desde, hasta) {
   curD=desde; curH=hasta;
-  const t=renderKpis(rows);
-  renderInsight(t,rows);
-  renderChart(allD,desde,hasta);
-  renderMetricChart(allD,rows,desde,hasta);
-  renderTopAds(allA,rows);
+  // Si hay filtro de fechas activo, calcular KPIs desde raw_diario (más preciso por período)
+  // Siempre usamos diario para gasto/impresiones/clicks/mensajes/leads
+  // El alcance no se puede sumar por día, viene de campañas
+  const useDiario = allD && allD.length > 0;
+  const totals = useDiario
+    ? calcTotalsFromDiario(allD, campañasRows, desde, hasta)
+    : calcTotals(campañasRows);
+  const t = renderKpis(campañasRows, totals);
+  renderInsight(t, campañasRows);
+  renderChart(allD, desde, hasta);
+  renderMetricChart(allD, campañasRows, desde, hasta);
+  renderTopAds(allA, campañasRows);
 }
 
 async function init() {
@@ -564,6 +608,12 @@ async function init() {
     document.getElementById('footerInfo').textContent='Meta Ads API · sincronización diaria 07:00 hs';
     document.getElementById('dateFrom').value=h30;
     document.getElementById('dateTo').value=h;
+    // Limitar selector de fecha libre a máximo 365 días atrás
+    const hace365 = getDias(365);
+    document.getElementById('dateFrom').min = hace365;
+    document.getElementById('dateFrom').max = h;
+    document.getElementById('dateTo').min = hace365;
+    document.getElementById('dateTo').max = h;
 
     document.querySelectorAll('.preset-btn').forEach(btn=>{
       btn.addEventListener('click',()=>{
