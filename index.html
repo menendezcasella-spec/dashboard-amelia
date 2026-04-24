@@ -190,6 +190,20 @@
         <canvas id="spendChart" role="img" aria-label="Gasto diario"></canvas>
       </div>
     </div>
+    <div class="chart-section" id="metricChartSection" style="display:none;">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title" id="metricChartTitle">Métrica objetivo diaria</div>
+          <div class="chart-subtitle">Pasá el mouse sobre la línea para ver el valor exacto del día</div>
+        </div>
+        <div class="chart-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#C8D26C"></div><span id="metricChartLegend">Eventos</span></div>
+        </div>
+      </div>
+      <div class="chart-canvas-wrap">
+        <canvas id="metricChart" role="img" aria-label="Métrica objetivo diaria"></canvas>
+      </div>
+    </div>
     <div class="insight-block">
       <div class="insight-label">RESUMEN DEL PERÍODO</div>
       <div class="insight-text" id="insightText">Analizando...</div>
@@ -370,6 +384,8 @@ function renderKpis(rows) {
 }
 
 let chartInstance=null;
+let metricChartInstance=null;
+
 function renderChart(diario, desde, hasta) {
   let rows = desde||hasta ? diario.filter(r=>{
     const f=r.fecha||r.date_start||'';
@@ -384,11 +400,91 @@ function renderChart(diario, desde, hasta) {
   if(chartInstance) chartInstance.destroy();
   chartInstance = new Chart(document.getElementById('spendChart'),{
     type:'line',
-    data:{labels,datasets:[{data:values,borderColor:'#1E2A78',backgroundColor:'rgba(30,42,120,0.08)',fill:true,tension:0.35,borderWidth:2,pointRadius:0,pointHoverRadius:4}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{
-      x:{grid:{display:false},ticks:{color:'#5B627E',font:{size:10},maxTicksLimit:12}},
-      y:{grid:{color:'rgba(30,42,120,0.06)'},ticks:{color:'#5B627E',font:{size:10},callback:v=>'$'+Number(v).toLocaleString('es-AR')}}
-    }}
+    data:{labels,datasets:[{data:values,borderColor:'#1E2A78',backgroundColor:'rgba(30,42,120,0.08)',fill:true,tension:0.35,borderWidth:2,pointRadius:0,pointHoverRadius:5,pointHoverBackgroundColor:'#1E2A78'}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>'Gasto: $'+Number(ctx.parsed.y).toLocaleString('es-AR')}}
+      },
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#5B627E',font:{size:10},maxTicksLimit:12}},
+        y:{grid:{color:'rgba(30,42,120,0.06)'},ticks:{color:'#5B627E',font:{size:10},callback:v=>'$'+Number(v).toLocaleString('es-AR')}}
+      }
+    }
+  });
+}
+
+function renderMetricChart(diario, campanas, desde, hasta) {
+  // Detectar qué métrica mostrar según las campañas activas
+  const obj = detectarObjetivo(campanas);
+  const totals = calcTotals(campanas);
+
+  // Determinar columna del diario y etiqueta
+  let col='', label='', color='#C8D26C', prefix='';
+  if(totals.mensajes>0) { col='mensajes'; label='Mensajes / día'; }
+  else if(totals.leads>0) { col='leads'; label='Leads / día'; }
+  else if(totals.ventas>0) { col='ventas'; label='Ventas / día'; }
+  else if(obj==='LINK_CLICKS'||obj==='OUTCOME_TRAFFIC') { col='clicks'; label='Clicks / día'; }
+  else { col='alcance'; label='Alcance / día'; }
+
+  const section = document.getElementById('metricChartSection');
+  if(!col) { section.style.display='none'; return; }
+
+  let rows = desde||hasta ? diario.filter(r=>{
+    const f=r.fecha||r.date_start||'';
+    if(!f) return true;
+    if(desde && f<desde) return false;
+    if(hasta && f>hasta) return false;
+    return true;
+  }) : diario;
+
+  // Verificar que haya datos reales en esa columna
+  const hasData = rows.some(r=>parseN(r[col]||r[col+'_total']||'0')>0);
+  if(!hasData) { section.style.display='none'; return; }
+
+  section.style.display='block';
+  document.getElementById('metricChartTitle').textContent = label;
+  document.getElementById('metricChartLegend').textContent = label;
+
+  const labels2 = rows.map(r=>{ const d=(r.fecha||r.date_start||'').split('-'); return d.length===3?d[2]+'/'+d[1]:r.fecha||''; });
+  const values2 = rows.map(r=>parseI(r[col]||r[col+'_total']||'0'));
+
+  if(metricChartInstance) metricChartInstance.destroy();
+  metricChartInstance = new Chart(document.getElementById('metricChart'),{
+    type:'line',
+    data:{labels:labels2,datasets:[{
+      data:values2,
+      borderColor:'#C8D26C',
+      backgroundColor:'rgba(200,210,108,0.12)',
+      fill:true, tension:0.35, borderWidth:2,
+      pointRadius:0, pointHoverRadius:6,
+      pointHoverBackgroundColor:'#C8D26C',
+      pointHoverBorderColor:'#1E2A78',
+      pointHoverBorderWidth:2
+    }]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{
+          backgroundColor:'#1E2A78',
+          titleColor:'rgba(244,241,234,0.7)',
+          bodyColor:'#F4F1EA',
+          padding:10,
+          cornerRadius:8,
+          callbacks:{
+            title:ctx=>ctx[0].label,
+            label:ctx=>label.split('/')[0].trim()+': '+Number(ctx.parsed.y).toLocaleString('es-AR')
+          }
+        }
+      },
+      scales:{
+        x:{grid:{display:false},ticks:{color:'#5B627E',font:{size:10},maxTicksLimit:12}},
+        y:{grid:{color:'rgba(200,210,108,0.15)'},ticks:{color:'#5B627E',font:{size:10},callback:v=>Number(v).toLocaleString('es-AR')},min:0}
+      }
+    }
   });
 }
 
@@ -452,6 +548,7 @@ function update(rows,desde,hasta) {
   const t=renderKpis(rows);
   renderInsight(t,rows);
   renderChart(allD,desde,hasta);
+  renderMetricChart(allD,rows,desde,hasta);
   renderTopAds(allA,rows);
 }
 
