@@ -569,12 +569,16 @@ function renderTabs(campanas, onSelect) {
   tabs.innerHTML = '';
   tabsHist.innerHTML = '';
 
-  // Campaña activa = tuvo gasto en los últimos 30 días
+  // Campaña activa = fecha_fin en los últimos 30 días o sin fecha_fin
   const hace30 = getDias(30);
   const nombresActivos = new Set(
-    allD.filter(r => (r.fecha||r.date_start||'') >= hace30 && parseN(r.gasto) > 0)
-        .map(r => r.campaña_nombre||r.campaign_name||'')
-        .filter(Boolean)
+    campanas
+      .filter(c => {
+        const fin = c.fecha_fin || '';
+        return !fin || fin >= hace30;
+      })
+      .map(c => c.campaña_nombre||c.campaign_name||'')
+      .filter(Boolean)
   );
 
   const nombres = [...new Set(campanas.map(c=>c.campaña_nombre||c.campaign_name).filter(Boolean))];
